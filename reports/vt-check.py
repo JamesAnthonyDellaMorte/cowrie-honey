@@ -335,15 +335,15 @@ async def run(force=False, upload=True):
     # Summary
     # ==========================================================
     total_cached = db.execute("SELECT COUNT(*) FROM samples").fetchone()[0]
-    total_unknown = p1_unknown + p2_unknown - p3_done
+    total_known_db = db.execute("SELECT COUNT(*) FROM samples WHERE vt_known=1").fetchone()[0]
+    total_unknown_db = db.execute("SELECT COUNT(*) FROM samples WHERE vt_known=0").fetchone()[0]
 
     print("--- Summary ---")
     print(f"  Total files:   {total}")
     print(f"  From cache:    {p1_known + p1_unknown}")
     print(f"  Looked up:     {p2_known + p2_unknown + p2_error}")
     print(f"  Uploaded:      {p3_uploaded}")
-    print(f"  Unknown:       {max(0, total_unknown)}")
-    print(f"\n  Cache: {DB_PATH} ({total_cached} samples stored)")
+    print(f"\n  Database:      {total_cached} samples ({total_known_db} known, {total_unknown_db} unknown)")
 
     db.close()
 
