@@ -1,10 +1,41 @@
+networks:
+  honeypot:
+    internal: true
+  external:
+    driver: bridge
+
 services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    platform: linux/arm64
+    container_name: cowrie-backend
+    hostname: mediaserver
+    restart: always
+    networks:
+      - honeypot
+    volumes:
+      - ./dl:/var/spool/.captured
+    mem_limit: 512m
+    cpus: 1
+    pids_limit: 256
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "1"
+
   cowrie:
     image: cowrie/cowrie
     container_name: cowrie
     restart: always
+    depends_on:
+      - backend
     ports:
       - "22:2222"
+    networks:
+      - honeypot
+      - external
     volumes:
       # Runtime data
       - ./dl:/cowrie/cowrie-git/var/lib/cowrie/downloads
@@ -12,20 +43,8 @@ services:
       - ./keys:/cowrie/cowrie-git/var/lib/cowrie/keys
       # Config
       - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
-      # Fake filesystem
-      - ./honeyfs:/cowrie/cowrie-git/honeyfs
-      - ./data/fs.pickle:/cowrie/cowrie-git/src/cowrie/data/fs.pickle
-      # Custom command overrides
-      - ./commands/lspci.py:/cowrie/cowrie-git/src/cowrie/commands/lspci.py
-      - ./commands/uptime.py:/cowrie/cowrie-git/src/cowrie/commands/uptime.py
-      - ./commands/top.py:/cowrie/cowrie-git/src/cowrie/commands/top.py
-      - ./commands/__init__.py:/cowrie/cowrie-git/src/cowrie/commands/__init__.py
-      # Core overrides
-      - ./core/artifact.py:/cowrie/cowrie-git/src/cowrie/core/artifact.py
-      - ./shell/fs.py:/cowrie/cowrie-git/src/cowrie/shell/fs.py
-      # Text command outputs
-      - ./txtcmds/usr/bin/nvidia-smi:/cowrie/cowrie-git/src/cowrie/data/txtcmds/usr/bin/nvidia-smi
-      - ./txtcmds/usr/bin/lscpu:/cowrie/cowrie-git/src/cowrie/data/txtcmds/usr/bin/lscpu
+      # Proxy SFTP override (friendly filenames)
+      - ./ssh_proxy/sftp.py:/cowrie/cowrie-git/src/cowrie/ssh_proxy/protocols/sftp.py
     logging:
       options:
         max-size: "600m"
