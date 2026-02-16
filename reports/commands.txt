@@ -1,0 +1,7 @@
+Command Frequency (total: 252 commands, 5 unique)
+==================================================
+   57  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; uname=$(uname -s -v -n -m 2>/dev/null); ...
+   57  uname -s -v -n -m 2 > /dev/null
+   57  uname -m 2 > /dev/null
+   57  cat /proc/uptime 2 > /dev/null | cut -d. -f1
+   24  chmod +x clean.sh; sh clean.sh; rm -rf clean.sh; chmod +x setup.sh; sh setup.sh; rm -rf setup.sh; mkdir -p ~/.ssh; chatt...

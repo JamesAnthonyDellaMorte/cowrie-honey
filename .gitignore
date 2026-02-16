@@ -1,0 +1,9 @@
+dl/
+log/
+keys/
+reports/analysis/
+reports/vt-cache.db
+reports/upx
+__pycache__/
+*.pyc
+data/fs.pickle

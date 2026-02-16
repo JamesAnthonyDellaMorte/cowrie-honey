@@ -1,0 +1,32 @@
+services:
+  cowrie:
+    image: cowrie/cowrie
+    container_name: cowrie
+    restart: always
+    ports:
+      - "22:2222"
+    volumes:
+      # Runtime data
+      - ./dl:/cowrie/cowrie-git/var/lib/cowrie/downloads
+      - ./log:/cowrie/cowrie-git/var/log/cowrie
+      - ./keys:/cowrie/cowrie-git/var/lib/cowrie/keys
+      # Config
+      - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
+      # Fake filesystem
+      - ./honeyfs:/cowrie/cowrie-git/honeyfs
+      - ./data/fs.pickle:/cowrie/cowrie-git/src/cowrie/data/fs.pickle
+      # Custom command overrides
+      - ./commands/lspci.py:/cowrie/cowrie-git/src/cowrie/commands/lspci.py
+      - ./commands/uptime.py:/cowrie/cowrie-git/src/cowrie/commands/uptime.py
+      - ./commands/top.py:/cowrie/cowrie-git/src/cowrie/commands/top.py
+      - ./commands/__init__.py:/cowrie/cowrie-git/src/cowrie/commands/__init__.py
+      # Core overrides
+      - ./core/artifact.py:/cowrie/cowrie-git/src/cowrie/core/artifact.py
+      - ./shell/fs.py:/cowrie/cowrie-git/src/cowrie/shell/fs.py
+      # Text command outputs
+      - ./txtcmds/usr/bin/nvidia-smi:/cowrie/cowrie-git/src/cowrie/data/txtcmds/usr/bin/nvidia-smi
+      - ./txtcmds/usr/bin/lscpu:/cowrie/cowrie-git/src/cowrie/data/txtcmds/usr/bin/lscpu
+    logging:
+      options:
+        max-size: "600m"
+        max-file: "1"
