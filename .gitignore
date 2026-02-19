@@ -1,6 +1,7 @@
 dl/
 log/
 keys/
+unanalyzed/
 reports/analysis/
 reports/vt-cache.db
 reports/upx
