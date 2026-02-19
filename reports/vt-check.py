@@ -201,11 +201,11 @@ async def run(force=False, upload=True):
                 if known:
                     print(f"  [cache] {sha[:16]}... -> {det}/{vtotal} - {label}  [{names}]")
                     p1_known += 1
+                    continue
                 else:
-                    print(f"  [cache] ****** UNKNOWN: {sha[:16]}... ******")
-                    shutil.copy2(entry["path"], UNANALYZED / entry["bname"])
+                    # Unknown in cache — re-check in Pass 2
+                    print(f"  [recheck] {sha[:16]}... was unknown, will re-check")
                     p1_unknown += 1
-                continue
         uncached.append(entry)
 
     print(f"  Known: {p1_known} | Unknown: {p1_unknown} | Need lookup: {len(uncached)}\n")

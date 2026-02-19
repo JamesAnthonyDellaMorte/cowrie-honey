@@ -13,6 +13,11 @@ services:
     container_name: cowrie-backend
     hostname: mediaserver
     restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "cat /proc/1/stat >/dev/null && [ $$(( $(date +%s) - $(stat -c %Y /proc/1) )) -lt 600 ]"]
+      interval: 60s
+      retries: 1
+      start_period: 60s
     networks:
       - honeypot
     volumes:
@@ -33,6 +38,8 @@ services:
       - backend
     ports:
       - "22:2222"
+    environment:
+      - TZ=America/New_York
     networks:
       - honeypot
       - external
@@ -43,47 +50,10 @@ services:
       - ./keys:/cowrie/cowrie-git/var/lib/cowrie/keys
       # Config
       - ./cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
+      - ./userdb.txt:/cowrie/cowrie-git/etc/userdb.txt
       # Proxy SFTP override (friendly filenames)
       - ./ssh_proxy/sftp.py:/cowrie/cowrie-git/src/cowrie/ssh_proxy/protocols/sftp.py
     logging:
       options:
         max-size: "600m"
-        max-file: "1"
-
-  dionaea:
-    build:
-      context: ./dionaea
-      dockerfile: Dockerfile
-    container_name: dionaea
-    restart: always
-    command: >
-      bash -c "chown -R dionaea:dionaea /opt/dionaea/var/lib/dionaea /opt/dionaea/var/log/dionaea /dl;
-      /usr/local/bin/dionaea-to-dl.sh &
-      exec /usr/local/sbin/entrypoint.sh"
-    ports:
-      - "21:21"
-      - "42:42"
-      - "69:69/udp"
-      - "135:135"
-      - "443:443"
-      - "445:445"
-      - "1433:1433"
-      - "1723:1723"
-      - "1883:1883"
-      - "1900:1900/udp"
-      - "3306:3306"
-      - "5060:5060"
-      - "5060:5060/udp"
-      - "5061:5061"
-      - "11211:11211"
-    volumes:
-      - ./dl:/dl
-      - ./dionaea/log:/opt/dionaea/var/log/dionaea
-      - ./dionaea/binaries:/opt/dionaea/var/lib/dionaea/binaries
-      - ./dionaea/bistreams:/opt/dionaea/var/lib/dionaea/bistreams
-    mem_limit: 512m
-    cpus: 1
-    logging:
-      options:
-        max-size: "100m"
         max-file: "1"

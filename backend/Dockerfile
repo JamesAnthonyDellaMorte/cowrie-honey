@@ -33,7 +33,10 @@ RUN echo 'mediaserver' > /etc/hostname
 # Make it look lived-in
 RUN mkdir -p /root/.ssh && \
     touch /root/.bash_history && \
-    echo 'export PS1="\u@\h:\w\$ "' >> /root/.bashrc
+    echo 'export PS1="\u@\h:\w\$ "' >> /root/.bashrc && \
+    sed -i 's/^PrintMotd yes/PrintMotd no/' /etc/ssh/sshd_config
+
+COPY motd /etc/motd
 
 COPY capture.sh /usr/local/bin/capture.sh
 RUN chmod +x /usr/local/bin/capture.sh
