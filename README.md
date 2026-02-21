@@ -16,6 +16,83 @@ Primary sample store: `/root/cowrie/dl`
 - Captures land in `dl/` using hash-prefixed names (`sha9-originalname`) for easy correlation with logs and analysis artifacts.
 - The reports/analysis side is already wired, with backup, VirusTotal, YARA, and decompilation helpers.
 
+## Applied Throughput Tuning (2026-02-21)
+This section documents exactly what was changed to increase binary capture rate while keeping host impact moderate.
+
+### 1) Container resources (moderate bump)
+- File: `docker-compose.yml`
+- Changes:
+  - `cpus: 2.0` (was lower)
+  - `mem_limit: 3g`
+  - `memswap_limit: 4g`
+  - `pids_limit: 512`
+- Goal:
+  - Reduce worker starvation during attack bursts.
+  - Improve concurrent URL and file processing without aggressively consuming host resources.
+
+### 2) Watchdog restart policy (less churn)
+- File: `backend-watchdog.sh`
+- Changes:
+  - `THRESHOLD_CPU=90`
+  - `THRESHOLD_MEM=92`
+  - `CPU_STRIKES_RESTART=30`
+- Goal:
+  - Avoid restarting Cowrie during short CPU spikes.
+  - Preserve active attacker sessions long enough for second-stage payload delivery.
+
+### 3) Miner-killer timing (capture-first behavior)
+- File: `backend/miner-killer.sh`
+- Changes:
+  - Added `MINER_GRACE_SECONDS=1200` (20 min) before killing known miner process names.
+  - Added configurable high-CPU controls:
+    - `HIGH_CPU_THRESHOLD=50.0`
+    - `HIGH_CPU_STRIKES=4`
+- Goal:
+  - Let payload chains complete before cleanup.
+  - Still contain long-running abusive processes.
+
+### 4) URL capture parallelization and resilience
+- File: `url-capture.py`
+- Changes:
+  - Added multi-threaded downloader pool (`ThreadPoolExecutor`).
+  - Defaults:
+    - `URL_CAPTURE_WORKERS=8`
+    - `URL_CAPTURE_MAX_ATTEMPTS=4`
+    - `URL_CAPTURE_TIMEOUT=30`
+  - Added bounded retry model for failed URL fetches.
+  - Added in-flight URL dedup to prevent duplicate concurrent downloads.
+  - Added placeholder resolution for `$SERVER_IP` and `${SERVER_IP}` using event `src_ip`.
+  - Added ANSI cleanup in command parsing before URL extraction.
+- Goal:
+  - Increase binaries/minute from URL-based droppers.
+  - Recover from transient C2 failures without endless retries.
+
+### 5) File watcher depth and scan cadence
+- File: `backend/capture.sh`
+- Changes:
+  - Added directory-specific depth function:
+    - deep scan (`maxdepth 5`) for `/tmp`, `/var/tmp`, `/dev/shm`
+    - medium scan (`maxdepth 4`) for `/root`, `/home`
+    - default scan (`maxdepth 2`) elsewhere
+  - Reduced periodic rescan interval to `30s` (`RESCAN_SECONDS=30`).
+- Goal:
+  - Catch staged payloads in deeper temp paths.
+  - Reduce miss window between inotify and periodic scan.
+
+### 6) Validation and deployment completed
+- Validation run:
+  - `bash -n backend-watchdog.sh`
+  - `bash -n backend/miner-killer.sh`
+  - `bash -n backend/capture.sh`
+  - `python3 -m py_compile url-capture.py`
+  - `docker compose config`
+- Deployment:
+  - `docker compose up -d --build`
+  - Container came up healthy.
+- Observed post-deploy:
+  - URL capture worker started with 8 workers and replayed historical events.
+  - New payload capture log lines appeared after restart.
+
 ## Docker + Service Architecture
 ### Compose and networking
 - `docker-compose.yml` runs one service: `cowrie`.

@@ -2,11 +2,14 @@
 # Kills known miner processes, high-CPU consumers, and repairs attacker lockdowns
 # to keep the honeypot fresh and accessible.
 # Self-healing runs every 30 seconds.
-# CPU hogs get 10 minutes before being killed (3 checks, ~3.3 min apart)
-# to let attackers finish downloading payloads before we intervene.
+# Known miner names get a grace period before kill so second-stage payloads can land.
+# CPU hogs also get sustained strikes before kill.
 
 SAFE_RE="sshd|twistd|rsyslogd|syslog-ng|inetd|telnetd|login|bash|sleep|inotifywait|atd|init|ps|awk|grep|python3|setpriv|wait|cron|curl|wget"
 MINER_RE="xmrig|cpuminer|minerd|ccminer|nbminer|redtail|kdevtmpfsi|kinsing|c3pool|cryptonight|xmr-stak|\.cache|pPTlDTgT|xmr|stratum"
+MINER_GRACE_SECONDS=1200
+HIGH_CPU_THRESHOLD=50.0
+HIGH_CPU_STRIKES=4
 
 # Track how many times we've seen a PID using high CPU
 declare -A cpu_strikes
@@ -30,19 +33,22 @@ while true; do
         /usr/sbin/sshd -D -e &
     fi
 
-    # 1. Kill processes matching known miner names (immediate, no delay)
-    ps -eo pid,comm --no-headers 2>/dev/null | while read pid comm; do
+    # 1. Kill known miner names after grace period to preserve payload capture.
+    ps -eo pid,etimes,comm --no-headers 2>/dev/null | while read pid etimes comm; do
         [ "$pid" -le 2 ] 2>/dev/null && continue
         echo "$comm" | grep -qiE "$SAFE_RE" && continue
         if echo "$comm" | grep -qiE "$MINER_RE"; then
-            kill -9 "$pid" 2>/dev/null
-            echo "[miner-killer] $(date +%H:%M:%S) killed miner: PID=$pid name=$comm"
+            [ -z "$etimes" ] && etimes=0
+            if [ "$etimes" -ge "$MINER_GRACE_SECONDS" ] 2>/dev/null; then
+                kill -9 "$pid" 2>/dev/null
+                echo "[miner-killer] $(date +%H:%M:%S) killed miner: PID=$pid name=$comm age=${etimes}s"
+            fi
         fi
     done
 
-    # 2. Track non-safe processes using >50% CPU
+    # 2. Track non-safe processes using high CPU
     #    Only check every 7th loop (~3.3 min apart)
-    #    3 strikes = ~10 minutes before killing
+    #    4 strikes = ~13 minutes before killing
     if [ $((loop_count % 7)) -eq 0 ]; then
         current_hot=()
         while read pid cpu comm; do
@@ -53,14 +59,14 @@ while true; do
             strikes=$((strikes + 1))
             cpu_strikes[$pid]=$strikes
 
-            if [ "$strikes" -ge 3 ]; then
+            if [ "$strikes" -ge "$HIGH_CPU_STRIKES" ]; then
                 kill -9 "$pid" 2>/dev/null
                 echo "[miner-killer] $(date +%H:%M:%S) killed high-CPU (strike $strikes): PID=$pid name=$comm cpu=$cpu%"
                 unset cpu_strikes[$pid]
             else
-                echo "[miner-killer] $(date +%H:%M:%S) high-CPU strike $strikes/3: PID=$pid name=$comm cpu=$cpu%"
+                echo "[miner-killer] $(date +%H:%M:%S) high-CPU strike $strikes/${HIGH_CPU_STRIKES}: PID=$pid name=$comm cpu=$cpu%"
             fi
-        done < <(ps -eo pid,%cpu,comm --no-headers 2>/dev/null | awk '$2 > 50.0 {print $1, $2, $3}')
+        done < <(ps -eo pid,%cpu,comm --no-headers 2>/dev/null | awk -v threshold="$HIGH_CPU_THRESHOLD" '$2 > threshold {print $1, $2, $3}')
 
         # Clear strikes for PIDs that are no longer hot
         for pid in "${!cpu_strikes[@]}"; do

@@ -202,12 +202,6 @@ rule Aarch64_Go_Packed_Bot
         severity    = "high"
 
     strings:
-        // Go runtime pool structures (present in less-stripped variants)
-        $sync_pool   = "*sync.Pool" ascii
-        $deferpool   = "deferpool" ascii
-        $framepool   = "framePool" ascii
-        $writepool   = "writePool" ascii
-        $buildonce   = "buildOnce" ascii
         // Go build ID seen across all known samples of this family
         $gobuildid   = "kSkyaQnBpMWHzhzftUbB/3Ikfs90WHFlfPTOw24GH" ascii
 
@@ -216,10 +210,7 @@ rule Aarch64_Go_Packed_Bot
         and filesize > 500KB
         // ARM64 ELF: e_machine at offset 0x12 == 0xB7
         and uint16(0x12) == 0x00B7
-        and (
-            3 of ($sync_pool, $deferpool, $framepool, $writepool, $buildonce)
-            or $gobuildid
-        )
+        and $gobuildid
 }
 
 
@@ -246,6 +237,8 @@ rule XorDDoS_ELF
 
     condition:
         uint32(0) == 0x464C457F
+        // i386 ELF (XorDDoS lineage in this corpus)
+        and uint16(0x12) == 0x0003
         and filesize < 1MB
         and $procself
         and $histfile
@@ -262,18 +255,26 @@ rule SSH_Key_Injection
     meta:
         author      = "James"
         family      = "SSHKeyInjection"
-        description = "Injected SSH authorized_keys file"
+        description = "Script/payload that injects attacker SSH keys into authorized_keys"
         severity    = "medium"
 
     strings:
         $key1 = "ssh-rsa AAAA" ascii
         $key2 = "ssh-ed25519 AAAA" ascii
         $key3 = "ssh-dss AAAA" ascii
+        $auth = "authorized_keys" ascii
+        $mkdir = "mkdir -p ~/.ssh" ascii
+        $chmod1 = "chmod 700 ~/.ssh" ascii
+        $chmod2 = "chmod 600 ~/.ssh/authorized_keys" ascii
+        $append = ">> ~/.ssh/authorized_keys" ascii
+        $echo = "echo \"" ascii
 
     condition:
-        filesize < 10KB
-        and filesize > 50
+        filesize < 20KB
+        and filesize > 80
         and any of ($key1, $key2, $key3)
+        and $auth
+        and 2 of ($mkdir, $chmod1, $chmod2, $append, $echo)
 }
 
 
@@ -296,12 +297,23 @@ rule Dot16_XMRig_Miner
         // C++ mangled XMRig RandomX JIT symbols — survive even in 98KB partial downloads
         $jit     = "randomx14JitCompilerX86" ascii
         $threads = "xmrig7Threads" ascii
+        // Dot16 actor deployment markers
+        $dot16_cfg = ".16.json" ascii
+        $b0s_cfg   = ".b0s.json" ascii
+        $x0lock    = ".X0-lock" ascii
+        // Dot16 x86_64 build-toolchain fingerprint observed in both dl and unanalyzed sets
+        $curl_static = "/root/curl-static/lib64" ascii
+        $krb5_src    = "/usr/local/src/krb5-1.20.1/src/lib/krb5" ascii
 
     condition:
         uint32(0) == 0x464C457F
         and filesize > 50KB
         and $jit
         and $threads
+        and (
+            any of ($dot16_cfg, $b0s_cfg, $x0lock)
+            or ($curl_static and $krb5_src)
+        )
 }
 
 
@@ -329,7 +341,11 @@ rule Dot16_Dropper
     condition:
         uint32(0) == 0x464C457F
         and filesize > 100KB
-        and 2 of them
+        // Require actor-specific path/marker plus one behavioral string
+        and (
+            ($dot16_path and 1 of ($copy_exec, $dl_from, $miner_run, $snapd_chk))
+            or ($copy_exec and 1 of ($dl_from, $miner_run, $snapd_chk))
+        )
 }
 
 
@@ -359,6 +375,8 @@ rule BillGates_DDoS
 
     condition:
         uint32(0) == 0x464C457F
+        // BillGates family samples here are i386 static ELF
+        and uint16(0x12) == 0x0003
         and filesize > 100KB
         and any of ($bill_status, $update_bill, $update_gates, $mon_gates, $task_gates)
         and 2 of ($attack_syn, $attack_dns, $attack_udp)
@@ -494,4 +512,91 @@ rule Dot16_SSHD_Backdoor
         and $libz and $libpthread and $libdl
         and $starttls
         and 2 of ($sasl, $daemon, $syslog, $prctl)
+}
+
+
+// ============================================================
+// DHPCD XMRIG MINER (UPX-packed, different actor from Redtail/Dot16)
+// Wallet: 82WBefqugLBf... — survives UPX compression
+// Disguised as dhpcd (DHCP daemon)
+// ============================================================
+
+rule DHPCD_XMRig_Miner
+{
+    meta:
+        author      = "James"
+        family      = "DHPCD_XMRig"
+        description = "UPX-packed XMRig miner disguised as dhpcd — unique wallet survives packing"
+        severity    = "high"
+
+    strings:
+        $wallet = "82WBefqugLBfZQg" ascii
+        $upx    = "UPX!" ascii
+        $upx_ver = "UPX 4.24" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 100KB
+        and $wallet
+        and ($upx or $upx_ver)
+}
+
+
+// ============================================================
+// COMPETITOR KILLER / CLEANER
+// Scans /proc for known malware paths and kills them
+// Checks for libprocesshider.so, validates ELF binaries,
+// monitors CPU usage of suspicious processes
+// Built with crosstool-NG 1.23.0 / GCC 6.3.0
+// ============================================================
+
+rule CompetitorKiller_Scanner
+{
+    meta:
+        author      = "James"
+        family      = "CompetitorKiller"
+        description = "Process scanner that detects and kills competing malware by path and CPU usage"
+        severity    = "medium"
+
+    strings:
+        $deleted    = "deleted binary %s" ascii
+        $whitelist  = "whitelisted" ascii
+        $highcpu    = "high CPU usage" ascii
+        $elf_check  = "File %s is not ELF" ascii
+        $hider1     = "/lib/libprocesshider.so" ascii
+        $hider2     = "/lib64/libprocesshider.so" ascii
+        $crosstool  = "crosstool-ng-1.23.0" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 50KB
+        and $deleted
+        and any of ($whitelist, $highcpu, $elf_check, $hider1, $hider2, $crosstool)
+}
+
+
+// ============================================================
+// DHPCD DROPPER (minimal network component)
+// Same crosstool-NG toolchain as CompetitorKiller
+// Tiny static binary, likely downloads/deploys the XMRig miner
+// ============================================================
+
+rule DHPCD_Dropper
+{
+    meta:
+        author      = "James"
+        family      = "DHPCD_Dropper"
+        description = "Minimal static dropper from DHPCD toolkit — crosstool-NG compiled"
+        severity    = "medium"
+
+    strings:
+        $crosstool = "crosstool-ng-1.23.0" ascii
+        $gcc       = "GCC: (crosstool-NG" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 10KB
+        and filesize < 100KB
+        and $crosstool
+        and $gcc
 }

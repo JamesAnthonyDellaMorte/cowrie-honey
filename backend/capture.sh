@@ -9,6 +9,15 @@ BASELINE="/var/spool/.baseline_md5"
 mkdir -p "$CAPTURE_DIR" "$STAGE_DIR"
 
 WATCH_DIRS="/root /tmp /var/tmp /dev/shm /bin /etc /home /usr /opt /run"
+RESCAN_SECONDS=30
+
+scan_depth() {
+    case "$1" in
+        /tmp|/var/tmp|/dev/shm) echo 5 ;;
+        /root|/home) echo 4 ;;
+        *) echo 2 ;;
+    esac
+}
 
 # --- Build baseline of all existing binaries at startup ---
 # MD5 is fast and sufficient for dedup (not used for security)
@@ -109,7 +118,8 @@ cleanup_junk
 
 # Initial scan of all watched dirs
 for dir in $WATCH_DIRS; do
-    find "$dir" -maxdepth 2 -type f 2>/dev/null | while read f; do
+    depth=$(scan_depth "$dir")
+    find "$dir" -maxdepth "$depth" -type f 2>/dev/null | while IFS= read -r f; do
         capture_file "$f"
     done
 done
@@ -117,9 +127,10 @@ done
 # Periodic rescan — catches anything inotifywait missed
 rescan_loop() {
     while true; do
-        sleep 60
+        sleep "$RESCAN_SECONDS"
         for dir in $WATCH_DIRS; do
-            find "$dir" -maxdepth 2 -type f -newer "$BASELINE" 2>/dev/null | while read f; do
+            depth=$(scan_depth "$dir")
+            find "$dir" -maxdepth "$depth" -type f -newer "$BASELINE" 2>/dev/null | while IFS= read -r f; do
                 capture_file "$f"
             done
         done

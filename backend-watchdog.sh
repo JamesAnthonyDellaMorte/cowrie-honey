@@ -2,11 +2,12 @@
 # Watchdog: monitor cowrie container CPU and memory, restart when thresholds exceeded
 # Runs via cron every 2 minutes
 # Memory triggers immediate restart (OOM can kill instantly)
-# CPU uses 2-strike system (4 minutes sustained)
+# CPU uses sustained-strike logic to avoid restarting during short attack bursts.
 
 CONTAINER="cowrie"
-THRESHOLD_CPU=70    # CPU percent
-THRESHOLD_MEM=85    # Memory percent of limit (85% of 2GB = 1.7GB)
+THRESHOLD_CPU=90    # CPU percent
+THRESHOLD_MEM=92    # Memory percent of limit
+CPU_STRIKES_RESTART=30
 STRIKES_FILE="/tmp/cowrie-strikes"
 METRICS_LOG="/root/cowrie/log/watchdog-metrics.csv"
 RESTART_LOG="/root/cowrie/log/watchdog-restarts.csv"
@@ -63,19 +64,19 @@ if [ "$mem_pct" -ge "$THRESHOLD_MEM" ]; then
     exit 0
 fi
 
-# CPU check — 2 strikes
+# CPU check — sustained strikes
 if [ "$cpu_int" -ge "$THRESHOLD_CPU" ]; then
     strikes=$((strikes + 1))
     echo "$strikes" > "$STRIKES_FILE"
     echo "$ts,$cpu,$mem_mb,$mem_pct,$pids,cpu,$strikes" >> "$METRICS_LOG"
 
-    if [ "$strikes" -ge 10 ]; then
+    if [ "$strikes" -ge "$CPU_STRIKES_RESTART" ]; then
         echo "$ts,$cpu,$mem_mb,$uptime_s,$pids,cpu" >> "$RESTART_LOG"
-        echo "$(date): RESTART — CPU ${cpu}% for 10 checks, ${mem_pct}% mem, up ${uptime_s}s, ${pids} PIDs"
+        echo "$(date): RESTART — CPU ${cpu}% for ${CPU_STRIKES_RESTART} checks, ${mem_pct}% mem, up ${uptime_s}s, ${pids} PIDs"
         cd /root/cowrie && docker compose down && sleep 2 && docker compose up -d
         rm -f "$STRIKES_FILE"
     else
-        echo "$(date): CPU ${cpu}% (strike $strikes/10, ${mem_pct}% mem, ${pids} PIDs, up ${uptime_s}s)"
+        echo "$(date): CPU ${cpu}% (strike $strikes/${CPU_STRIKES_RESTART}, ${mem_pct}% mem, ${pids} PIDs, up ${uptime_s}s)"
     fi
 else
     echo "$ts,$cpu,$mem_mb,$mem_pct,$pids,ok,0" >> "$METRICS_LOG"
