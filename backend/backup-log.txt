@@ -1,0 +1,60 @@
+[2025-12-28 03:00:01] Starting backup...
+sending incremental file list
+movies/The.Matrix.1999.1080p.mkv
+movies/Interstellar.2014.2160p.mkv
+sent 4,218,302 bytes  received 412 bytes  1,687,485.60 bytes/sec
+total size is 48,291,038,211  speedup is 11,449.21
+[2025-12-28 03:12:44] Backup complete
+
+[2026-01-04 03:00:01] Starting backup...
+sending incremental file list
+tv/Breaking.Bad/S01/
+tv/Breaking.Bad/S01/E01.mkv
+tv/Breaking.Bad/S01/E02.mkv
+music/albums/Pink.Floyd/
+sent 2,891,402 bytes  received 318 bytes  1,156,688.00 bytes/sec
+total size is 48,502,918,443  speedup is 16,771.48
+[2026-01-04 03:08:22] Backup complete
+
+[2026-01-11 03:00:01] Starting backup...
+sending incremental file list
+videos/How to Build a NAS.mkv
+downloads/ubuntu-24.04-server-amd64.iso
+sent 1,102,448 bytes  received 204 bytes  440,260.80 bytes/sec
+total size is 48,891,204,891  speedup is 44,349.42
+[2026-01-11 03:02:18] Backup complete
+
+[2026-01-18 03:00:01] Starting backup...
+sending incremental file list
+sent 89,412 bytes  received 12 bytes  35,769.60 bytes/sec
+total size is 48,891,204,891  speedup is 547,011.89
+[2026-01-18 03:00:04] Backup complete
+
+[2026-01-25 03:00:01] Starting backup...
+rsync: [sender] write error: Broken pipe (32)
+rsync error: error in socket IO (code 10) at io.c(829) [sender=3.2.7]
+[2026-01-25 03:00:03] Backup FAILED
+
+[2026-02-01 03:00:01] Starting backup...
+sending incremental file list
+movies/Blade.Runner.2049.2017.2160p.mkv
+movies/Dune.2021.2160p.mkv
+tv/Severance/S02/E01.mkv
+tv/Severance/S02/E02.mkv
+sent 8,412,902 bytes  received 612 bytes  3,365,405.60 bytes/sec
+total size is 51,204,891,223  speedup is 6,084.12
+[2026-02-01 03:18:41] Backup complete
+
+[2026-02-08 03:00:01] Starting backup...
+sending incremental file list
+tv/Severance/S02/E03.mkv
+videos/yt-dlp/Rick Astley - Never Gonna Give You Up.mkv
+sent 1,891,204 bytes  received 218 bytes  756,968.80 bytes/sec
+total size is 51,891,204,891  speedup is 27,439.38
+[2026-02-08 03:04:12] Backup complete
+
+[2026-02-15 03:00:01] Starting backup...
+sending incremental file list
+sent 91,204 bytes  received 12 bytes  36,486.40 bytes/sec
+total size is 51,891,204,891  speedup is 569,012.19
+[2026-02-15 03:00:03] Backup complete

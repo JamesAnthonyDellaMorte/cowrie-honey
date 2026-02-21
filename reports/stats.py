@@ -7,8 +7,6 @@ import sys
 from datetime import datetime, timedelta
 from collections import Counter
 
-import pytz
-
 md = "--markdown" in sys.argv or "-m" in sys.argv
 cutoff = datetime.now() - timedelta(hours=24)
 
@@ -21,6 +19,8 @@ def format_timestamp(ts_str):
     except Exception:
         return ts_str
 
+INTERNAL_IPS = {"10.1.0.49", "172.18.0.1", "10.1.0.4", "127.0.0.1"}
+
 connections = 0
 logins_ok = 0
 logins_fail = 0
@@ -29,6 +29,8 @@ passwords = Counter()
 usernames = Counter()
 ips = Counter()
 files = 0
+last_conn = None
+last_conn_ip = None
 
 for logfile in sorted(glob.glob("/root/cowrie/log/cowrie.json*")):
     for line in open(logfile):
@@ -37,7 +39,20 @@ for logfile in sorted(glob.glob("/root/cowrie/log/cowrie.json*")):
         except:
             continue
 
+        src = j.get("src_ip", "")
+        if src in INTERNAL_IPS:
+            continue
+
         ts = j.get("timestamp", "")
+        eid = j.get("eventid", "")
+
+        # Track last external connection (across all logs, not just 24h)
+        # Compare timestamps so file processing order doesn't matter
+        if eid == "cowrie.session.connect" and src:
+            if last_conn is None or ts > last_conn:
+                last_conn = ts
+                last_conn_ip = src
+
         try:
             dt = datetime.fromisoformat(ts.replace("Z", "+00:00").replace("+00:00", ""))
         except:
@@ -46,11 +61,9 @@ for logfile in sorted(glob.glob("/root/cowrie/log/cowrie.json*")):
         if dt < cutoff:
             continue
 
-        eid = j.get("eventid", "")
-
         if eid == "cowrie.session.connect":
             connections += 1
-            ips[j.get("src_ip", "?")] += 1
+            ips[src] += 1
 
         elif eid == "cowrie.login.success":
             logins_ok += 1
@@ -67,18 +80,6 @@ for logfile in sorted(glob.glob("/root/cowrie/log/cowrie.json*")):
 
         elif eid == "cowrie.session.file_upload":
             files += 1
-
-last_conn = None
-last_conn_ip = None
-for logfile in sorted(glob.glob("/root/cowrie/log/cowrie.json*")):
-    for line in open(logfile):
-        try:
-            j = json.loads(line)
-            if j.get("eventid") == "cowrie.session.connect":
-                last_conn = j.get("timestamp", "")
-                last_conn_ip = j.get("src_ip", "?")
-        except:
-            continue
 
 now = datetime.now()
 if last_conn:

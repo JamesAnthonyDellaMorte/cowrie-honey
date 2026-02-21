@@ -275,3 +275,223 @@ rule SSH_Key_Injection
         and filesize > 50
         and any of ($key1, $key2, $key3)
 }
+
+
+// ============================================================
+// DOT16 XMRIG MINER FAMILY (x86-64)
+// Bundled XMRig with RandomX JIT, libcurl, and persistence
+// Deployed as .16 and .b0s on x86-64 (aarch64 covered by Dot16_B0s)
+// Multiple wallets/operators sharing same build
+// ============================================================
+
+rule Dot16_XMRig_Miner
+{
+    meta:
+        author      = "James"
+        family      = "Dot16_XMRig"
+        description = "XMRig miner with RandomX JIT — deployed as .16/.b0s/.X0-lock by Dot16 actor"
+        severity    = "high"
+
+    strings:
+        // C++ mangled XMRig RandomX JIT symbols — survive even in 98KB partial downloads
+        $jit     = "randomx14JitCompilerX86" ascii
+        $threads = "xmrig7Threads" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 50KB
+        and $jit
+        and $threads
+}
+
+
+// ============================================================
+// DOT16 DROPPER (.X0-lock)
+// Downloads and deploys .16 XMRig miners + snapd persistence
+// Uses libcurl, copyAndExecute pattern
+// ============================================================
+
+rule Dot16_Dropper
+{
+    meta:
+        author      = "James"
+        family      = "Dot16_Dropper"
+        description = "Dot16 dropper — downloads .16 miners and snapd, copyAndExecute deployment"
+        severity    = "high"
+
+    strings:
+        $copy_exec = "copyAndExecute" ascii
+        $dl_from   = "Downloading from:" ascii
+        $miner_run = "Miner running:" ascii
+        $snapd_chk = "snapd doesn't exist or is invalid" ascii
+        $dot16_path = "/f/x86_64/.16" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 100KB
+        and 2 of them
+}
+
+
+// ============================================================
+// BILLGATES DDOS BOT (kswpad variant)
+// C++ DDoS bot with full attack class hierarchy
+// Statically linked i386, not stripped
+// ============================================================
+
+rule BillGates_DDoS
+{
+    meta:
+        author      = "James"
+        family      = "BillGates"
+        description = "BillGates DDoS bot — C++ class hierarchy with multi-vector attack capability"
+        severity    = "critical"
+
+    strings:
+        $bill_status = "CBillStatus" ascii
+        $update_bill = "CUpdateBill" ascii
+        $update_gates = "CUpdateGates" ascii
+        $mon_gates   = "CThreadMonGates" ascii
+        $task_gates  = "CThreadTaskGates" ascii
+        $attack_syn  = "CAttackSyn" ascii
+        $attack_dns  = "CAttackDns" ascii
+        $attack_udp  = "CAttackUdp" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 100KB
+        and any of ($bill_status, $update_bill, $update_gates, $mon_gates, $task_gates)
+        and 2 of ($attack_syn, $attack_dns, $attack_udp)
+}
+
+
+// ============================================================
+// GO DDOS BOT (amd64)
+// Go-compiled multi-vector DDoS bot with spoofing, proxy, encryption
+// Statically linked x86-64
+// ============================================================
+
+rule Go_DDoS_Bot
+{
+    meta:
+        author      = "James"
+        family      = "GoDDoS"
+        description = "Go-compiled DDoS bot with multi-vector attacks, IP spoofing, and XOR encryption"
+        severity    = "critical"
+
+    strings:
+        $attack_run = "main.Attack_Run" ascii
+        $spoof      = "main.Spoof" ascii
+        $xor_enc    = "main.XorEnc" ascii
+        $xor_dec    = "main.XorDec" ascii
+        $allowlist  = "main.(*Allowlist)" ascii
+        $watchdog   = "main.Watchdog" ascii
+        $plain_udp  = "main.Plain_Udp" ascii
+        $socks5     = "main.Socks5Connect" ascii
+        $initsh     = "main.initsh" ascii
+        $rclocal    = "main.rclocal" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 500KB
+        and $attack_run
+        and 2 of ($spoof, $xor_enc, $xor_dec, $allowlist, $watchdog, $plain_udp, $socks5, $initsh, $rclocal)
+}
+
+
+// ============================================================
+// KAITEN WEB3 DROPPER (kal64)
+// Go dropper that embeds and releases a "web3server" binary
+// Kills competing processes, cleans up after deployment
+// ============================================================
+
+rule Kaiten_Web3Dropper
+{
+    meta:
+        author      = "James"
+        family      = "KaitenDropper"
+        description = "Go-based dropper that releases embedded web3server binary"
+        severity    = "high"
+
+    strings:
+        $web3_release = "main.releaseAndRunWeb3Server" ascii
+        $clean_file   = "main.cleanFileAndProcess" ascii
+        $kill_proc    = "main.killProcessByName" ascii
+        $delete_file  = "main.deleteFile" ascii
+        $web3_str     = "web3server" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 500KB
+        and $web3_release
+        and any of ($clean_file, $kill_proc, $delete_file, $web3_str)
+}
+
+
+// ============================================================
+// PROCESS HIDER (LD_PRELOAD rootkit)
+// Hooks readdir/readdir64 to hide processes from ps/top
+// Loaded via /etc/ld.so.preload
+// ============================================================
+
+rule ProcessHider_LDPreload
+{
+    meta:
+        author      = "James"
+        family      = "ProcessHider"
+        description = "LD_PRELOAD rootkit that hooks readdir to hide processes from ps/top"
+        severity    = "critical"
+
+    strings:
+        $src             = "processhider.c" ascii
+        $filter          = "process_to_filter" ascii
+        $orig_readdir    = "original_readdir" ascii
+        $orig_readdir64  = "original_readdir64" ascii
+        $get_proc_name   = "get_process_name" ascii
+        $get_dir_name    = "get_dir_name" ascii
+        $proc_stat       = "/proc/%s/stat" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize < 100KB
+        and $src
+        and any of ($filter, $orig_readdir, $orig_readdir64, $get_proc_name, $get_dir_name, $proc_stat)
+}
+
+
+// ============================================================
+// DOT16 SSHD BACKDOOR
+// Packed/encrypted network backdoor deployed as /tmp/sshd
+// Uses zlib decompression, dlopen for runtime loading,
+// implements accept/fork daemon with STARTTLS/SASL auth
+// ============================================================
+
+rule Dot16_SSHD_Backdoor
+{
+    meta:
+        author      = "James"
+        family      = "Dot16_Backdoor"
+        description = "Packed network backdoor deployed as sshd — zlib-compressed, STARTTLS/SASL auth, command execution"
+        severity    = "critical"
+
+    strings:
+        // Linked libraries (specific combination)
+        $libz       = "libz.so.1" ascii
+        $libpthread = "libpthread.so.0" ascii
+        $libdl      = "libdl.so.2" ascii
+        // Protocol strings embedded in packed binary
+        $starttls   = "STARTTLS" ascii
+        $sasl       = "SASL" ascii
+        // Runtime behavior
+        $daemon     = "daemon" ascii
+        $syslog     = "syslog" ascii
+        $prctl      = "prctl" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and filesize > 50KB
+        and filesize < 10MB
+        and $libz and $libpthread and $libdl
+        and $starttls
+        and 2 of ($sasl, $daemon, $syslog, $prctl)
+}

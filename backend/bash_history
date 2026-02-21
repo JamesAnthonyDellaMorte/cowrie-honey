@@ -1,0 +1,39 @@
+apt update && apt upgrade -y
+systemctl restart nginx
+docker ps
+docker compose -f /opt/media/docker-compose.yml up -d
+nvidia-smi
+df -h
+free -m
+journalctl -u nginx --since "1 hour ago"
+tail -f /var/log/nginx/access.log
+certbot renew --dry-run
+docker logs jellyfin --tail 50
+du -sh /media/storage/*
+rsync -avz /media/storage/movies/ backup@192.168.1.50:/backup/movies/
+cat /etc/fstab
+lsblk
+nvidia-smi -l 5
+docker exec -it jellyfin bash
+curl -s http://localhost:8096/health
+systemctl status docker
+ss -tlnp
+docker system prune -f
+vim /etc/nginx/sites-available/media.conf
+nginx -t && systemctl reload nginx
+docker pull jellyfin/jellyfin:latest
+docker compose -f /opt/media/docker-compose.yml pull
+docker compose -f /opt/media/docker-compose.yml up -d
+uptime
+uname -a
+ls -la /media/storage/
+chmod 755 /opt/scripts/backup.sh
+/opt/scripts/backup.sh
+crontab -l
+docker stats --no-stream
+nvidia-smi --query-gpu=temperature.gpu,utilization.gpu,memory.used --format=csv
+ps aux | grep python
+pip3 install --upgrade yt-dlp
+yt-dlp -f best "https://www.youtube.com/watch?v=dQw4w9WgXcQ" -o "/media/storage/videos/%(title)s.%(ext)s"
+ls -lh /media/storage/videos/
+history

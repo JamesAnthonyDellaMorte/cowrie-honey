@@ -1,0 +1,38 @@
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+    volumes:
+      - /opt/media/jellyfin-config:/config
+      - /media/storage:/media
+    devices:
+      - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [gpu]
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/nginx/sites-available:/etc/nginx/conf.d
+      - /etc/letsencrypt:/etc/letsencrypt
+
+  transmission:
+    image: linuxserver/transmission:latest
+    container_name: transmission
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+    volumes:
+      - /opt/media/transmission-config:/config
+      - /media/storage/downloads:/downloads

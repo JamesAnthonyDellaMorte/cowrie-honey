@@ -1,51 +1,23 @@
-networks:
-  honeypot:
-    internal: true
-  external:
-    driver: bridge
-
 services:
-  backend:
+  cowrie:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
-    platform: linux/arm64
-    container_name: cowrie-backend
+    container_name: cowrie
     hostname: mediaserver
     restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "cat /proc/1/stat >/dev/null && [ $$(( $(date +%s) - $(stat -c %Y /proc/1) )) -lt 600 ]"]
-      interval: 60s
-      retries: 1
-      start_period: 60s
-    networks:
-      - honeypot
-    volumes:
-      - ./dl:/var/spool/.captured
-    mem_limit: 512m
-    cpus: 1
-    pids_limit: 256
-    logging:
-      options:
-        max-size: "50m"
-        max-file: "1"
-
-  cowrie:
-    image: cowrie/cowrie
-    container_name: cowrie
-    restart: always
-    depends_on:
-      - backend
     ports:
       - "22:2222"
+      - "23:2323"
+      - "2222:2222"
+      - "2200:2222"
+      - "10022:2222"
     environment:
       - TZ=America/New_York
-    networks:
-      - honeypot
-      - external
     volumes:
-      # Runtime data
-      - ./dl:/cowrie/cowrie-git/var/lib/cowrie/downloads
+      # All captured samples — mounted at /mnt/captures to avoid overlay2 conflicts
+      - ./dl:/mnt/captures
+      # Logs and keys
       - ./log:/cowrie/cowrie-git/var/log/cowrie
       - ./keys:/cowrie/cowrie-git/var/lib/cowrie/keys
       # Config
@@ -53,6 +25,17 @@ services:
       - ./userdb.txt:/cowrie/cowrie-git/etc/userdb.txt
       # Proxy SFTP override (friendly filenames)
       - ./ssh_proxy/sftp.py:/cowrie/cowrie-git/src/cowrie/ssh_proxy/protocols/sftp.py
+      # Telnet proxy handler fix (accept \n line endings)
+      - ./telnet_proxy/handler.py:/cowrie/cowrie-git/src/cowrie/telnet_proxy/handler.py
+    mem_limit: 2g
+    memswap_limit: 3g
+    cpus: 1
+    pids_limit: 256
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep sshd >/dev/null && pgrep -f twistd >/dev/null && pgrep -f rsyslogd >/dev/null && pgrep -f syslog-ng >/dev/null && pgrep inetutils-inetd >/dev/null"]
+      interval: 60s
+      retries: 3
+      start_period: 30s
     logging:
       options:
         max-size: "600m"

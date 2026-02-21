@@ -1,0 +1,8 @@
+# Edit this file to introduce tasks to be run by cron.
+# m h  dom mon dow   command
+0 3 * * * /usr/bin/certbot renew --quiet --deploy-hook "systemctl reload nginx"
+0 4 * * 0 /opt/scripts/backup.sh >> /var/log/backup.log 2>&1
+*/5 * * * * /opt/scripts/check-disk.sh
+0 2 * * * /usr/bin/docker system prune -f >> /var/log/docker-prune.log 2>&1
+30 3 * * * /usr/sbin/logrotate /etc/logrotate.conf
+0 */6 * * * /usr/bin/rsync -avz /media/storage/ backup@192.168.1.50:/backup/ >> /var/log/rsync.log 2>&1

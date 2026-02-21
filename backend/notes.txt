@@ -1,0 +1,15 @@
+Media Server Setup Notes
+========================
+
+GPU: Tesla T4 (for Jellyfin hardware transcoding)
+Storage: 4TB NVMe (/media/storage)
+Backup: rsync to 192.168.1.50 every 6 hours
+
+Jellyfin: http://localhost:8096
+Transmission: http://localhost:9091
+
+TODO:
+- Set up Sonarr/Radarr
+- Move to ZFS for snapshots
+- Upgrade to bookworm (done 2025-12-15)
+- Fix certbot auto-renewal (cron seems to work now)
