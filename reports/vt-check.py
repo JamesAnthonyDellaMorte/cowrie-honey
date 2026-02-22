@@ -26,12 +26,10 @@ import vt
 # --- Config ---
 VT_KEY = Path("/root/.config/virustotal/api_key").read_text().strip()
 DL = Path("/root/cowrie/dl")
-DB_PATH = Path("/root/cowrie/reports/vt-cache.db")
+DB_PATH = Path("/root/cowrie/reports/malware.db")
 UNANALYZED = Path("/root/cowrie/unanalyzed")
 RATE_LIMIT = 4       # lookups per minute
 RATE_WINDOW = 60     # seconds
-POLL_INTERVAL = 30   # seconds between poll attempts
-POLL_MAX = 10        # max poll rounds
 
 
 # --- Database ---
@@ -137,6 +135,7 @@ class RateLimiter:
         self.max_calls = max_calls
         self.window = window
         self.calls = []
+        self.progress = ""
 
     async def acquire(self):
         now = time.time()
@@ -146,10 +145,10 @@ class RateLimiter:
             wait_until = self.calls[0] + self.window
             remaining = wait_until - now
             while remaining > 0:
-                print(f"\r  [rate] Waiting... {int(remaining)}s  ", end="", flush=True)
+                print(f"\r  [rate] Waiting... {int(remaining)}s {self.progress} ", end="", flush=True)
                 await asyncio.sleep(1)
                 remaining -= 1
-            print("\r  [rate] Resuming...            ", flush=True)
+            print("\r  [rate] Resuming...                              ", flush=True)
             self.calls = []
         self.calls.append(time.time())
 
@@ -262,48 +261,49 @@ async def run(force=False, upload=True):
         rate = RateLimiter(RATE_LIMIT, RATE_WINDOW)
 
         async with vt.Client(VT_KEY) as client:
-            for entry in uncached:
+            total_uncached = len(uncached)
+            for i, entry in enumerate(uncached, 1):
                 sha = entry["sha256"]
                 fname = entry["fname"]
                 size = entry["size"]
                 ftype = filetype(entry["path"])
                 link = vt_link(sha)
                 entry["filetype"] = ftype
+                remaining = total_uncached - i
+                rate.progress = f"({remaining} remaining)"
 
                 await rate.acquire()
 
                 try:
                     obj = await client.get_object_async(f"/files/{sha}")
                     det, vtotal, label, names = parse_vt_object(obj)
-                    print(f"  [new]   {sha[:16]}... -> {det}/{vtotal} - {label}  [{names}]")
+                    print(f"  [{i}/{total_uncached}] {sha[:16]}... -> {det}/{vtotal} - {label}  [{names}]")
                     db_save_known(db, sha, fname, size, ftype, det, vtotal, label, names, link)
                     p2_known += 1
                 except vt.APIError as e:
                     if e.code == "NotFoundError":
-                        print(f"  [new]   {sha[:16]}... -> NOT ON VT ({fname})")
+                        print(f"  [{i}/{total_uncached}] {sha[:16]}... -> NOT ON VT ({fname})")
                         db_save_unknown(db, sha, fname, size, ftype, link)
                         shutil.copy2(entry["path"], UNANALYZED / entry["bname"])
                         unknowns.append(entry)
                         p2_unknown += 1
                     else:
-                        print(f"  [error] {sha[:16]}... -> {e.code}: {e.message}")
+                        print(f"  [{i}/{total_uncached}] {sha[:16]}... -> {e.code}: {e.message}")
                         p2_error += 1
 
         print(f"  Known: {p2_known} | Unknown: {p2_unknown} | Errors: {p2_error}\n")
 
     # ==========================================================
-    # PASS 3: Upload unknowns, then poll
+    # PASS 3: Upload unknowns to VT, then classify locally with YARA
     # ==========================================================
     p3_uploaded = 0
-    p3_done = 0
-    p3_pending = 0
+    p3_yara = 0
 
     if upload and unknowns:
-        print("--- Pass 3: Upload & analyze ---")
+        print("--- Pass 3: Upload & YARA classify ---")
 
-        uploaded = []
+        # Upload to VT (no polling — let VT process on their own time)
         async with vt.Client(VT_KEY) as client:
-            # Upload all (no rate limit on uploads)
             for entry in unknowns:
                 fname = entry["fname"]
                 sha = entry["sha256"]
@@ -314,61 +314,40 @@ async def run(force=False, upload=True):
                     with open(entry["path"], "rb") as f:
                         await client.scan_file_async(f)
                     print(f"  [upload] Submitted! {link}")
-                    uploaded.append(entry)
                     p3_uploaded += 1
                 except vt.APIError as e:
                     print(f"  [upload] Failed: {e.code}")
 
-            # Poll for results
-            if uploaded:
-                print(f"\n  Waiting for VT to process {len(uploaded)} samples...")
-                rate = RateLimiter(RATE_LIMIT, RATE_WINDOW)
-                pending = list(uploaded)
+        # Classify locally with YARA rules
+        try:
+            import yara
+            rules_path = Path(__file__).parent / "rules.yar"
+            if rules_path.exists():
+                rules = yara.compile(filepath=str(rules_path))
+                for entry in unknowns:
+                    sha = entry["sha256"]
+                    fname = entry["fname"]
+                    size = entry["size"]
+                    ftype = entry.get("filetype", "unknown")
+                    link = vt_link(sha)
 
-                for attempt in range(1, POLL_MAX + 1):
-                    if not pending:
-                        break
+                    matches = rules.match(str(entry["path"]))
+                    if matches:
+                        family = matches[0].meta.get("family", matches[0].rule)
+                        label = f"yara:{family}"
+                        print(f"  [yara]  {sha[:16]}... -> {label}")
+                        db_save_known(db, sha, fname, size, ftype, 0, 0, label, family, link)
+                        # Remove from unanalyzed since we classified it
+                        ua = UNANALYZED / entry["bname"]
+                        if ua.exists():
+                            ua.unlink()
+                        p3_yara += 1
+                    else:
+                        print(f"  [yara]  {sha[:16]}... -> no YARA match ({fname})")
+        except ImportError:
+            print("  [yara] yara-python not installed, skipping local classification")
 
-                    # Countdown timer
-                    for sec in range(POLL_INTERVAL, 0, -1):
-                        print(f"\r  [poll] Next check in {sec}s ({len(pending)} pending)  ", end="", flush=True)
-                        await asyncio.sleep(1)
-                    print()
-
-                    still_pending = []
-                    for entry in pending:
-                        sha = entry["sha256"]
-                        fname = entry["fname"]
-                        size = entry["size"]
-                        ftype = entry.get("filetype", "unknown")
-                        link = vt_link(sha)
-
-                        await rate.acquire()
-
-                        try:
-                            obj = await client.get_object_async(f"/files/{sha}")
-                            det, vtotal, label, names = parse_vt_object(obj)
-                            if vtotal > 0:
-                                print(f"  [done]  {sha[:16]}... -> {det}/{vtotal} - {label}  [{names}]")
-                                db_save_known(db, sha, fname, size, ftype, det, vtotal, label, names, link)
-                                # Remove from unanalyzed
-                                ua = UNANALYZED / entry["bname"]
-                                if ua.exists():
-                                    ua.unlink()
-                                p3_done += 1
-                            else:
-                                still_pending.append(entry)
-                        except vt.APIError:
-                            still_pending.append(entry)
-
-                    pending = still_pending
-
-                # Report still pending
-                for entry in pending:
-                    print(f"  [pending] {entry['fname']} — check later: {vt_link(entry['sha256'])}")
-                    p3_pending += 1
-
-        print(f"  Uploaded: {p3_uploaded} | Analyzed: {p3_done} | Pending: {p3_pending}\n")
+        print(f"  Uploaded: {p3_uploaded} | YARA classified: {p3_yara}\n")
 
     # ==========================================================
     # Summary
@@ -387,10 +366,61 @@ async def run(force=False, upload=True):
     db.close()
 
 
+async def refresh_yara_tags():
+    """Re-check all yara-tagged entries on VT, replace with VT label if available."""
+    db = init_db()
+    rows = db.execute(
+        "SELECT sha256, filename, filesize, filetype FROM samples WHERE vt_label LIKE 'yara:%'"
+    ).fetchall()
+
+    if not rows:
+        print("  No yara-tagged entries to refresh.")
+        db.close()
+        return
+
+    print(f"--- Refreshing {len(rows)} yara-tagged entries against VT ---")
+    rate = RateLimiter(RATE_LIMIT, RATE_WINDOW)
+    updated = 0
+    still_yara = 0
+
+    async with vt.Client(VT_KEY) as client:
+        for i, (sha, fname, size, ftype) in enumerate(rows, 1):
+            remaining = len(rows) - i
+            rate.progress = f"({remaining} remaining)"
+            link = vt_link(sha)
+
+            await rate.acquire()
+
+            try:
+                obj = await client.get_object_async(f"/files/{sha}")
+                det, vtotal, label, names = parse_vt_object(obj)
+                if vtotal > 0:
+                    print(f"  [{i}/{len(rows)}] {sha[:16]}... -> {det}/{vtotal} - {label}  [{names}]")
+                    db_save_known(db, sha, fname, size, ftype, det, vtotal, label, names, link)
+                    updated += 1
+                else:
+                    print(f"  [{i}/{len(rows)}] {sha[:16]}... -> VT has it but no results yet")
+                    still_yara += 1
+            except vt.APIError as e:
+                if e.code == "NotFoundError":
+                    print(f"  [{i}/{len(rows)}] {sha[:16]}... -> still not on VT")
+                    still_yara += 1
+                else:
+                    print(f"  [{i}/{len(rows)}] {sha[:16]}... -> {e.code}")
+
+    print(f"\n  Updated: {updated} | Still yara-only: {still_yara}")
+    db.close()
+
+
 def main():
     force = "--force" in sys.argv
     no_upload = "--no-upload" in sys.argv
-    asyncio.run(run(force=force, upload=not no_upload))
+    refresh = "--vt-refresh" in sys.argv
+
+    if refresh:
+        asyncio.run(refresh_yara_tags())
+    else:
+        asyncio.run(run(force=force, upload=not no_upload))
 
 
 if __name__ == "__main__":

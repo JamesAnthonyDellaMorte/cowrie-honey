@@ -65,10 +65,11 @@ def scan_directory(rules, directory):
                 matched_strs = []
                 for sm in m.strings:
                     for inst in sm.instances:
-                        try:
-                            s = inst.matched_data.decode("ascii", errors="replace")[:40]
-                        except:
-                            s = inst.matched_data.hex()[:40]
+                        raw = inst.matched_data
+                        if all(32 <= b < 127 for b in raw):
+                            s = raw.decode("ascii")[:40]
+                        else:
+                            s = raw.hex(" ")[:40]
                         matched_strs.append(f"${sm.identifier}={s}")
                         break  # one instance per string is enough
 

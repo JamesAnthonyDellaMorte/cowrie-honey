@@ -1,22 +1,28 @@
 #!/bin/bash
-# Backup new malware samples to Storj (deduplicated via vt-cache.db)
-# Usage: backup-samples.sh [--dry-run]
+# Backup new malware samples to Storj (deduplicated via malware.db)
+# Usage: backup-samples.sh [--dry-run] [--clean]
 #
 # Scans dl/ and unanalyzed/, hashes every file, skips partials,
 # skips any SHA256 already marked backed_up in the DB,
 # zips new samples with password "infected", uploads to Storj.
-# Tracks backup state in vt-cache.db (backed_up column).
+# Tracks backup state in malware.db (backed_up column).
 
 set -e
 
 COWRIE="/root/cowrie"
 BUCKET="sj://cowrie/samples"
 ACCESS="cowrie"
-DB="$COWRIE/reports/vt-cache.db"
+DB="$COWRIE/reports/malware.db"
 PASSWORD="infected"
 DRY_RUN=false
+CLEAN=false
 
-[ "$1" = "--dry-run" ] && DRY_RUN=true
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=true ;;
+        --clean) CLEAN=true ;;
+    esac
+done
 
 shopt -s nullglob
 
@@ -120,7 +126,11 @@ upload_dir() {
     echo "[$LABEL] Done. ${#NEW_FILES[@]} new samples uploaded."
 }
 
-upload_dir "$COWRIE/dl" "cowrie" "delete"
+if $CLEAN; then
+    upload_dir "$COWRIE/dl" "cowrie" "delete"
+else
+    upload_dir "$COWRIE/dl" "cowrie"
+fi
 upload_dir "$COWRIE/unanalyzed" "cowrie-unanalyzed"
 
 TOTAL=$(sqlite3 "$DB" "SELECT COUNT(*) FROM samples WHERE backed_up=1;")
