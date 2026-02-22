@@ -5,11 +5,14 @@
 # Known miner names get a grace period before kill so second-stage payloads can land.
 # CPU hogs also get sustained strikes before kill.
 
-SAFE_RE="sshd|twistd|rsyslogd|syslog-ng|inetd|telnetd|login|bash|sleep|inotifywait|atd|init|ps|awk|grep|python3|setpriv|wait|cron|curl|wget"
+SAFE_RE="twistd|rsyslogd|syslog-ng|inetd|telnetd|login|bash|sleep|inotifywait|atd|init|ps|awk|grep|python3|setpriv|wait|cron|curl|wget"
 MINER_RE="xmrig|cpuminer|minerd|ccminer|nbminer|redtail|kdevtmpfsi|kinsing|c3pool|cryptonight|xmr-stak|\.cache|pPTlDTgT|xmr|stratum"
 MINER_GRACE_SECONDS=1200
 HIGH_CPU_THRESHOLD=50.0
 HIGH_CPU_STRIKES=4
+
+# Protect the sshd listener (PPID=1) but NOT sshd session children
+SSHD_LISTENER_PID=$(ps -eo pid,ppid,comm --no-headers 2>/dev/null | awk '$3=="sshd" && $2==1 {print $1; exit}')
 
 # Track how many times we've seen a PID using high CPU
 declare -A cpu_strikes
@@ -31,6 +34,8 @@ while true; do
         pkill -9 sshd 2>/dev/null
         sleep 1
         /usr/sbin/sshd -D -e &
+        sleep 1
+        SSHD_LISTENER_PID=$(ps -eo pid,ppid,comm --no-headers 2>/dev/null | awk '$3=="sshd" && $2==1 {print $1; exit}')
     fi
 
     # 1. Kill known miner names after grace period to preserve payload capture.
@@ -54,6 +59,8 @@ while true; do
         while read pid cpu comm; do
             [ "$pid" -le 2 ] 2>/dev/null && continue
             echo "$comm" | grep -qiE "$SAFE_RE" && continue
+            # Protect sshd listener, but allow sshd session children to be killed
+            [ "$comm" = "sshd" ] && [ "$pid" = "$SSHD_LISTENER_PID" ] && continue
             current_hot+=("$pid")
             strikes=${cpu_strikes[$pid]:-0}
             strikes=$((strikes + 1))

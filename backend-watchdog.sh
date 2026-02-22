@@ -7,7 +7,7 @@
 CONTAINER="cowrie"
 THRESHOLD_CPU=90    # CPU percent
 THRESHOLD_MEM=92    # Memory percent of limit
-CPU_STRIKES_RESTART=30
+CPU_STRIKES_RESTART=8
 STRIKES_FILE="/tmp/cowrie-strikes"
 METRICS_LOG="/root/cowrie/log/watchdog-metrics.csv"
 RESTART_LOG="/root/cowrie/log/watchdog-restarts.csv"

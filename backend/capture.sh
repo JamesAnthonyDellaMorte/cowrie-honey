@@ -29,6 +29,27 @@ find /bin /usr/bin /usr/sbin /sbin /usr/local/bin /etc /opt /run \
     | sort -u > "$BASELINE"
 echo "[capture] Baseline: $(wc -l < "$BASELINE") system binaries fingerprinted"
 
+# Rebuild baseline whenever apt/dpkg installs new packages
+rebuild_baseline() {
+    find /bin /usr/bin /usr/sbin /sbin /usr/local/bin /etc /opt /run \
+        /usr/lib /usr/share -maxdepth 3 -type f -executable 2>/dev/null \
+        | xargs -P4 md5sum 2>/dev/null \
+        | cut -d' ' -f1 \
+        | sort -u > "$BASELINE"
+    echo "[capture] Baseline rebuilt: $(wc -l < "$BASELINE") binaries"
+}
+
+# Watch dpkg database for changes and rebuild baseline
+dpkg_watcher() {
+    while true; do
+        inotifywait -qq -e close_write /var/lib/dpkg/status 2>/dev/null
+        echo "[capture] dpkg database changed, rebuilding baseline..."
+        sleep 5  # let apt finish installing everything
+        rebuild_baseline
+    done
+}
+dpkg_watcher &
+
 is_system_binary() {
     local md5
     md5=$(md5sum "$1" 2>/dev/null | cut -d' ' -f1)
@@ -62,6 +83,8 @@ capture_file() {
     [ "$size" = "0" ] && return
     is_executable_binary "$src" || return
     is_system_binary "$src" && return
+    # Skip files owned by installed packages (e.g. attacker ran apt install)
+    dpkg -S "$src" >/dev/null 2>&1 && return
 
     # Skip truncated ELF downloads — if section header offset > file size, it's partial
     local magic
@@ -150,6 +173,10 @@ while true; do
                 echo "[capture] removed junk: $base"
             fi
         else
+            # Delay for system paths — give dpkg time to register apt-installed files
+            case "$fullpath" in
+                /usr/bin/*|/usr/sbin/*|/usr/lib/*|/usr/share/*|/bin/*|/sbin/*) sleep 10 ;;
+            esac
             capture_file "$fullpath"
         fi
     done

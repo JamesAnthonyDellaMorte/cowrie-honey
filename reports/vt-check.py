@@ -155,14 +155,53 @@ class RateLimiter:
 
 
 # --- Scanning ---
+def is_partial_download(path):
+    """Check if a binary is a truncated download based on its header metadata."""
+    try:
+        with open(path, "rb") as f:
+            header = f.read(64)
+        size = path.stat().st_size
+        magic = header[:4]
+
+        # ELF — check section header offset vs file size
+        if magic == b"\x7fELF":
+            ei_class = header[4]
+            if ei_class == 2:  # ELF64
+                shoff = int.from_bytes(header[40:48], "little")
+            else:  # ELF32
+                shoff = int.from_bytes(header[32:36], "little")
+            return shoff > 0 and size < shoff
+
+        # PE — check PE header offset, then optional header size
+        if magic[:2] == b"MZ" and size >= 64:
+            pe_offset = int.from_bytes(header[60:64], "little")
+            if pe_offset > 0 and size < pe_offset + 24:
+                return True
+
+        # Mach-O — no reliable truncation check from header alone,
+        # but a file under 4KB claiming to be Mach-O is suspect
+        if magic in (b"\xfe\xed\xfa\xce", b"\xfe\xed\xfa\xcf",
+                     b"\xce\xfa\xed\xfe", b"\xcf\xfa\xed\xfe",
+                     b"\xca\xfe\xba\xbe"):
+            return size < 4096
+
+        return False
+    except Exception:
+        return False
+
+
 def collect_files():
-    """Build list of files to check."""
+    """Build list of files to check, removing partials."""
     files = []
     for f in sorted(DL.iterdir()):
         if f.is_symlink() or not f.is_file():
             continue
         size = f.stat().st_size
         if size == 0:
+            continue
+        if is_partial_download(f):
+            print(f"  [partial] Removing truncated download: {f.name}")
+            f.unlink()
             continue
         bname = f.name
         fname = friendly_name(bname)

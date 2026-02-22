@@ -93,6 +93,69 @@ This section documents exactly what was changed to increase binary capture rate 
   - URL capture worker started with 8 workers and replayed historical events.
   - New payload capture log lines appeared after restart.
 
+## Applied YARA Tuning (2026-02-22)
+This section documents the triage and YARA improvements made for previously unmatched downloads.
+
+### 1) Samples triaged with `r2`/`rabin2`
+- `dl/25c34c028-b_linux`
+- `dl/cb7ab5036-s_linux`
+- `dl/9e919b5fb-aarch64_sshd`
+- Findings:
+  - The two `*_linux` samples are UPX-packed i386 ELF payloads with a stable UPX block signature and SSH-brute indicators.
+  - The `aarch64_sshd` sample is an ARM64 Dot16/B0s toolkit variant using `libprocesshider` + `ld.so.preload` persistence strings.
+
+### 2) Rule updates
+- File: `reports/rules.yar`
+- Changes:
+  - Expanded `Dot16_B0s_Aarch64_Bot` to also detect ARM64 processhider/sshd variants.
+  - Added `Go_SSH_Scanner_UPX` for the new UPX-packed i386 SSH scanner/bruter lineage.
+
+### 3) Verification result
+- Run:
+  - `python3 reports/yara-scan.py`
+- Result:
+  - `Scanned: 84`
+  - `Matched: 84`
+  - `No match: 0`
+
+### 4) New drop wave triage (2026-02-22)
+- New unmatched wave characteristics:
+  - `43` unmatched files (`38` unique SHA256)
+  - all unmatched samples were `ELF64 x86-64`, static, UPX-packed
+  - repeated actor-specific UPX signature at first `"/UPX!"` block
+  - observed markers from unpacked representative: SSH handling + XMR/RC4 strings
+- Rule added:
+  - `Obf_UPX_SSH_XMR_x64` in `reports/rules.yar`
+  - family tag: `ObfUPX_SSHXMR`
+- Verification after rule update:
+  - `python3 reports/yara-scan.py`
+  - `Scanned: 79`
+  - `Matched: 79`
+  - `No match: 0`
+
+### 5) IOC report generated (2026-02-22)
+- File: `reports/obfupx_sshxmr_ioc_report_2026-02-22.md`
+- Includes:
+  - r2/rabin2 binary triage findings
+  - command-telemetry behavior profile
+  - campaign source IP and time window
+  - actionable hunting/detection patterns
+
+### 6) Benign tooling rollback + DL cleanup (2026-02-22)
+- Per request, removed benign/noise YARA rules from `reports/rules.yar`:
+  - `GNU_Binutils_Gprofng_Debian240`
+  - `GNU_Bzip2_Utilities`
+  - `GNU_XZ_Utilities`
+  - `GNU_Nano_Editor`
+  - `GNU_Gettext_And_Jansson_Libs`
+- Removed the corresponding benign toolchain files from `dl/`:
+  - `42` files deleted (Debian `binutils`/`gprofng`, `xz`, `bzip2`, `nano`, `gettext`/`libjansson` related payloads).
+- Verification after cleanup:
+  - `python3 reports/yara-scan.py`
+  - `Scanned: 80`
+  - `Matched: 80`
+  - `No match: 0`
+
 ## Docker + Service Architecture
 ### Compose and networking
 - `docker-compose.yml` runs one service: `cowrie`.

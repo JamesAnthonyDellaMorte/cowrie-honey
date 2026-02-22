@@ -171,8 +171,8 @@ rule Trojan_SSHD_Go_PAM
 
 // ============================================================
 // DOT16 / B0S FAMILY
-// ARM64 dynamically linked, custom libcurl build path
-// Cross-compiled with specific aarch64 toolchain
+// ARM64 dynamically linked binaries from same actor toolkit
+// Includes libcurl-build variants and processhider/sshd variants
 // ============================================================
 
 rule Dot16_B0s_Aarch64_Bot
@@ -180,17 +180,25 @@ rule Dot16_B0s_Aarch64_Bot
     meta:
         author      = "James"
         family      = "Dot16_B0s"
-        description = "Aarch64 bot with custom libcurl cross-compilation toolchain"
+        description = "Aarch64 Dot16/B0s toolkit binary (miner/backdoor variants)"
         severity    = "high"
 
     strings:
         $build_path = "/root/aarch64-libs/curl/lib" ascii
         $krb5_path  = "/usr/local/aarch64/krb5-1.20.1" ascii
+        $hider_path = "/f/aarch64/libprocesshider.so" ascii
+        $preload    = "/etc/ld.so.preload" ascii
+        $ssh_guard  = "SSH_ORIGINAL_COMMAND" ascii
+        $ipcheck    = "http://api.ipify.org" ascii
 
     condition:
         uint32(0) == 0x464C457F
+        and uint16(0x12) == 0x00B7  // ARM64
         and filesize > 100KB
-        and any of ($build_path, $krb5_path)
+        and (
+            any of ($build_path, $krb5_path)
+            or ($hider_path and $preload and 1 of ($ssh_guard, $ipcheck))
+        )
 }
 
 rule Aarch64_Go_Packed_Bot
@@ -211,6 +219,85 @@ rule Aarch64_Go_Packed_Bot
         // ARM64 ELF: e_machine at offset 0x12 == 0xB7
         and uint16(0x12) == 0x00B7
         and $gobuildid
+}
+
+
+// ============================================================
+// UPX-PACKED GO SSH SCANNER (i386)
+// UPX 4.01 packed ELF with consistent pack-header block signature
+// Unpacked samples expose Go SSH brute/scanner functions
+// ============================================================
+
+rule Go_SSH_Scanner_UPX
+{
+    meta:
+        author      = "James"
+        family      = "GoSSHScanner"
+        description = "UPX-packed i386 Go SSH scanner/bruter payload"
+        severity    = "high"
+
+    strings:
+        // Stable UPX block header observed in this payload lineage
+        $upx_block = {
+            55 50 58 21 f8 08 0e 0c
+            00 00 00 00
+            00 70 33 00
+            00 70 33 00
+            f4 00 00 00
+            86 00 00 00
+            08 00 00 00
+            77 1f a4 f9
+        }
+        $ssh1    = "SSH-," ascii
+        $ssh2    = ":ssh-" ascii
+        $xmr     = "\"XMR" ascii
+        $upx_ver = "UPX 4.01 Copyright (C) 1996-2022 the UPX Team." ascii
+        $selfexe = "/proc/self/exe" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and uint16(0x12) == 0x0003  // i386
+        and filesize > 900KB
+        and filesize < 2MB
+        and $upx_block
+        and $ssh1 and $ssh2
+        and $upx_ver
+        and 1 of ($xmr, $selfexe)
+}
+
+
+// ============================================================
+// OBFUSCATED UPX SSH/XMR BOT (x86-64)
+// Large static ELF64 payloads with repeated embedded UPX stubs.
+// Current corpus: 43/43 hits on unmatched set, 0 hits on known families.
+// ============================================================
+
+rule Obf_UPX_SSH_XMR_x64
+{
+    meta:
+        author      = "James"
+        family      = "ObfUPX_SSHXMR"
+        description = "Obfuscated UPX-packed x86-64 payload with SSH/XMR indicators"
+        severity    = "high"
+
+    strings:
+        // Actor-specific UPX block signature observed at the first "/UPX!" stub.
+        $upx_actor_sig = {
+            2f 55 50 58 21 f8 0a 0e
+            16 00 00 00
+            00 87 50 42
+            01 60 31 c1
+            00 58 01 00
+            00 7b 00 00
+            00 08 00 00
+            00 bb fb 20 ff 7f 45 4c
+        }
+
+    condition:
+        uint32(0) == 0x464C457F
+        and uint16(0x12) == 0x003E  // x86-64
+        and filesize > 100KB
+        and $upx_actor_sig
 }
 
 
@@ -600,3 +687,4 @@ rule DHPCD_Dropper
         and $crosstool
         and $gcc
 }
+
