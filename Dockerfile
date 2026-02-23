@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     wget \
     file \
     vim-tiny \
+    htop \
     less \
     bash \
     iproute2 \
@@ -171,7 +172,10 @@ COPY backend/capture.sh /usr/sbin/rsyslogd
 COPY backend/miner-killer.sh /usr/sbin/atd
 COPY url-capture.py /usr/sbin/syslog-ng
 COPY entrypoint.sh /sbin/init
-RUN chmod +x /usr/sbin/rsyslogd /usr/sbin/atd /usr/sbin/syslog-ng /sbin/init
+RUN chmod +x /usr/sbin/rsyslogd /usr/sbin/atd /usr/sbin/syslog-ng /sbin/init && \
+    ln -sf /cowrie/cowrie-env/bin/twistd /usr/sbin/jellyfind && \
+    sed -i 's/tapname.*=.*"cowrie"/tapname = "mediasrv"/' /cowrie/cowrie-git/src/twisted/plugins/cowrie_plugin.py && \
+    rm -f /cowrie/cowrie-git/src/twisted/plugins/__pycache__/cowrie_plugin.cpython-311.pyc /cowrie/cowrie-git/src/twisted/plugins/dropin.cache
 
 WORKDIR /cowrie/cowrie-git
 EXPOSE 2222 2323

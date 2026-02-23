@@ -296,8 +296,49 @@ rule Obf_UPX_SSH_XMR_x64
     condition:
         uint32(0) == 0x464C457F
         and uint16(0x12) == 0x003E  // x86-64
-        and filesize > 100KB
+        // Include 96KB truncated pulls that share the same actor UPX stub.
+        and filesize >= 96KB
         and $upx_actor_sig
+}
+
+// ============================================================
+// GO SSH SCANNER / DROPPER (x86-64 cache variant, often partial)
+// Shares a stable UPX header block and entrypoint across cache samples.
+// ============================================================
+
+rule Go_SSH_Scanner_UPX_x64_Cache
+{
+    meta:
+        author      = "James"
+        family      = "GoSSHScanner"
+        description = "UPX-packed x86-64 cache variant with ftp/ssh/tcp markers"
+        severity    = "high"
+
+    strings:
+        $upx_cache_sig = {
+            2f 55 50 58 21 fc 0a 0e
+            16 00 00 00
+            00 87 b0 2b
+            00 b5 e4 18
+            00 58 01 00
+            00 7c 00 00
+            00 08 00 00
+        }
+        $proto_mix = "dLdpftpssh::)" ascii
+        $tcp_fmt   = "tcp%s" ascii
+        $selfexe   = "/proc/self/exe" ascii
+        $upx_ver   = "UPX 4.23 Copyright (C) 1996-2024 the UPX Team." ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and uint16(0x12) == 0x003E  // x86-64
+        and uint32(0x18) == 0x00814E90
+        and uint32(0x1C) == 0x00000000
+        and $upx_cache_sig
+        and (
+            filesize < 200KB
+            or any of ($proto_mix, $tcp_fmt, $selfexe, $upx_ver)
+        )
 }
 
 
@@ -485,6 +526,7 @@ rule Go_DDoS_Bot
         severity    = "critical"
 
     strings:
+        // Full function names (unstripped builds)
         $attack_run = "main.Attack_Run" ascii
         $spoof      = "main.Spoof" ascii
         $xor_enc    = "main.XorEnc" ascii
@@ -495,12 +537,41 @@ rule Go_DDoS_Bot
         $socks5     = "main.Socks5Connect" ascii
         $initsh     = "main.initsh" ascii
         $rclocal    = "main.rclocal" ascii
+        // Go type descriptors (survive stripping)
+        $type_allow = "*main.Allowlist" ascii
+        $type_proxy = "*main.Proxy" ascii
+        $type_tcp   = "*main.TCP" ascii
+        $type_rng   = "*main.RNG" ascii
+        $type_ini   = "*main.ini" ascii
 
     condition:
         uint32(0) == 0x464C457F
         and filesize > 500KB
-        and $attack_run
-        and 2 of ($spoof, $xor_enc, $xor_dec, $allowlist, $watchdog, $plain_udp, $socks5, $initsh, $rclocal)
+        and (
+            ($attack_run and 2 of ($spoof, $xor_enc, $xor_dec, $allowlist, $watchdog, $plain_udp, $socks5, $initsh, $rclocal))
+            or (3 of ($type_allow, $type_proxy, $type_tcp, $type_rng, $type_ini))
+        )
+}
+
+rule Go_DDoS_Bot_Partial_amd64
+{
+    meta:
+        author      = "James"
+        family      = "GoDDoS"
+        description = "amd64 Go DDoS build-ID variant (matches partial and larger stripped builds)"
+        severity    = "high"
+
+    strings:
+        $build_id = "9aweAb3NxvdjkKSF5j5z/-6qEjXc-SfQjEyoBRUWa/M_49j5sTTJLMK3MMdr3g/OVx2LvkSFU1AaVRWkhzu" ascii
+
+    condition:
+        uint32(0) == 0x464C457F
+        and uint16(0x12) == 0x003E
+        and filesize > 150KB
+        and filesize < 2MB
+        and uint32(0x18) == 0x00467E20
+        and uint32(0x1C) == 0x00000000
+        and $build_id
 }
 
 
@@ -548,19 +619,25 @@ rule ProcessHider_LDPreload
         severity    = "critical"
 
     strings:
+        // Unstripped builds
         $src             = "processhider.c" ascii
         $filter          = "process_to_filter" ascii
         $orig_readdir    = "original_readdir" ascii
         $orig_readdir64  = "original_readdir64" ascii
         $get_proc_name   = "get_process_name" ascii
         $get_dir_name    = "get_dir_name" ascii
+        // Behavioral strings (survive stripping)
         $proc_stat       = "/proc/%s/stat" ascii
+        $proc_fd         = "/proc/self/fd/%d" ascii
+        $dlsym_err       = "Error in dlsym: %s" ascii
 
     condition:
         uint32(0) == 0x464C457F
         and filesize < 100KB
-        and $src
-        and any of ($filter, $orig_readdir, $orig_readdir64, $get_proc_name, $get_dir_name, $proc_stat)
+        and (
+            ($src and any of ($filter, $orig_readdir, $orig_readdir64, $get_proc_name, $get_dir_name, $proc_stat))
+            or ($proc_stat and $proc_fd and $dlsym_err)
+        )
 }
 
 
@@ -687,4 +764,3 @@ rule DHPCD_Dropper
         and $crosstool
         and $gcc
 }
-

@@ -31,7 +31,7 @@ ulimit -u 128
 /usr/sbin/rsyslogd &
 
 # URL capture — downloads URLs from attacker wget/curl commands
-/cowrie/cowrie-env/bin/python3 /usr/sbin/syslog-ng &
+python3 /usr/sbin/syslog-ng &
 
 # Miner killer — keeps system fresh for new attackers
 /usr/sbin/atd &
@@ -41,8 +41,8 @@ cd /cowrie/cowrie-git
 COWRIE_UID=$(id -u cowrie)
 COWRIE_GID=$(id -g cowrie)
 setpriv --reuid=$COWRIE_UID --regid=$COWRIE_GID --init-groups \
-    /cowrie/cowrie-env/bin/python3 /cowrie/cowrie-env/bin/twistd \
-    -n --umask=0022 --pidfile= cowrie &
+    python3 /usr/sbin/jellyfind \
+    -n --umask=0022 --pidfile= mediasrv &
 
 # If any child exits, the container should restart
 wait -n

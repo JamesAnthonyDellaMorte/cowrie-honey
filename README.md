@@ -16,6 +16,16 @@ Primary sample store: `/root/cowrie/dl`
 - Captures land in `dl/` using hash-prefixed names (`sha9-originalname`) for easy correlation with logs and analysis artifacts.
 - The reports/analysis side is already wired, with backup, VirusTotal, YARA, and decompilation helpers.
 
+## Optional Windows Sensor Pack (RDP + Heralding)
+- Added file: `docker-compose.windows.yml`
+- Purpose:
+  - `rdphoney` on `3389/tcp` for Windows/RDP-focused attacks.
+  - `heralding` for additional credential-capture protocols (`110`, `143`, `993`, `995`, `1080`, `5432`, `5900`) without conflicting with Cowrie SSH/Telnet ports.
+- Start:
+  - `docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d`
+- Stop:
+  - `docker compose -f docker-compose.yml -f docker-compose.windows.yml down`
+
 ## Applied Throughput Tuning (2026-02-21)
 This section documents exactly what was changed to increase binary capture rate while keeping host impact moderate.
 
@@ -154,6 +164,25 @@ This section documents the triage and YARA improvements made for previously unma
   - `python3 reports/yara-scan.py`
   - `Scanned: 80`
   - `Matched: 80`
+  - `No match: 0`
+
+### 7) Six unmatched sample triage + rule fix (2026-02-23)
+- Trigger:
+  - Scan result showed `Scanned: 165`, `Matched: 159`, `No match: 6`.
+- Triage method:
+  - Used `r2`/`rabin2`, `readelf`, and prefix comparison against known samples.
+- Findings:
+  - `2` files were 96KB truncated pulls of the existing `ObfUPX_SSHXMR` family.
+  - `3` files (`*-cache`) shared a distinct UPX header block (`/UPX! fc 0a 0e 16 ...`) and fixed entrypoint (`0x814e90`) tied to SSH/FTP/TCP scanner behavior.
+  - `1` file (`a58bf641c-amd64`) was a truncated prefix of known `GoDDoS` amd64 binaries (same Go build-id string and entrypoint).
+- Rule updates in `reports/rules.yar`:
+  - Relaxed `Obf_UPX_SSH_XMR_x64` size floor to include 96KB truncations.
+  - Added `Go_SSH_Scanner_UPX_x64_Cache` (family: `GoSSHScanner`).
+  - Added `Go_DDoS_Bot_Partial_amd64` (family: `GoDDoS`).
+- Verification:
+  - `python3 reports/yara-scan.py`
+  - `Scanned: 165`
+  - `Matched: 165`
   - `No match: 0`
 
 ## Docker + Service Architecture

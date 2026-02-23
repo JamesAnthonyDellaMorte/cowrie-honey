@@ -73,6 +73,21 @@ is_executable_binary() {
     return 1
 }
 
+is_core_dump() {
+    local src="$1"
+    local magic
+    magic=$(od -A n -t x1 -N 4 "$src" 2>/dev/null | tr -d ' ')
+    [ "$magic" != "7f454c46" ] && return 1
+
+    # e_type at bytes 16-17: ET_CORE == 0x0004
+    local etype
+    etype=$(od -A n -t x1 -j 16 -N 2 "$src" 2>/dev/null | tr -d ' ')
+    case "$etype" in
+        0400|0004) return 0 ;;
+    esac
+    return 1
+}
+
 capture_file() {
     local src="$1"
     [ ! -f "$src" ] && return
@@ -82,6 +97,10 @@ capture_file() {
     local size=$(stat -c%s "$src" 2>/dev/null)
     [ "$size" = "0" ] && return
     is_executable_binary "$src" || return
+    if is_core_dump "$src"; then
+        echo "[capture] skipped core dump: $(basename "$src")"
+        return
+    fi
     is_system_binary "$src" && return
     # Skip files owned by installed packages (e.g. attacker ran apt install)
     dpkg -S "$src" >/dev/null 2>&1 && return
@@ -102,6 +121,8 @@ capture_file() {
         fi
         if [ -n "$shoff" ] && [ "$shoff" -gt 0 ] 2>/dev/null && [ "$size" -lt "$shoff" ]; then
             echo "[capture] skipped partial: $(basename "$src") ($size / $shoff bytes)"
+            # Signal host to rescue this file
+            echo "$(basename "$src")" > /mnt/captures/.rescue
             return
         fi
     fi

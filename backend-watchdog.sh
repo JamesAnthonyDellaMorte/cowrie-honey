@@ -5,7 +5,7 @@
 # CPU uses sustained-strike logic to avoid restarting during short attack bursts.
 
 CONTAINER="cowrie"
-THRESHOLD_CPU=90    # CPU percent
+THRESHOLD_CPU=70    # CPU percent (container capped at 75%)
 THRESHOLD_MEM=92    # Memory percent of limit
 CPU_STRIKES_RESTART=8
 STRIKES_FILE="/tmp/cowrie-strikes"

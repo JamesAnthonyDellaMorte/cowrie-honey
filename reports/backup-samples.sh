@@ -106,7 +106,7 @@ upload_dir() {
     local SIZE=$(du -h "$ARCHIVE" | cut -f1)
     echo "[$LABEL] Uploading $SIZE (${#NEW_FILES[@]} samples) to $REMOTE..."
 
-    uplink cp "$ARCHIVE" "$REMOTE" --access "$ACCESS"
+    /usr/local/bin/uplink cp "$ARCHIVE" "$REMOTE" --access "$ACCESS"
 
     # Mark as backed up in DB
     for h in "${NEW_HASHES[@]}"; do
